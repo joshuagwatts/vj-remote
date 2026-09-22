@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:,">
+<title>vj-remote</title>
+<style>
+  :root{
+    --bg:#0b0d12; --card:#161b26; --card2:#1d2331; --line:#2a3145;
+    --txt:#eef1f7; --dim:#9aa3b8; --accent:#ffb020; --accent-d:#7a5200;
+    --green:#35d07f; --amber:#ffb020; --red:#ff5d5d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+    touch-action:manipulation; overscroll-behavior:none; min-height:100%;}
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;
+    padding:10px 12px; padding-top:calc(10px + env(safe-area-inset-top));
+    background:rgba(11,13,18,.96); border-bottom:1px solid var(--line); backdrop-filter:blur(6px);}
+  .brand{font-weight:800; letter-spacing:.5px; font-size:17px; white-space:nowrap;}
+  .brand small{display:block; font-weight:400; font-size:10px; color:var(--dim); letter-spacing:1.5px;}
+  .dot{width:13px; height:13px; border-radius:50%; background:var(--amber); flex:none;
+    box-shadow:0 0 8px currentColor; transition:background .2s;}
+  .dot.ok{background:var(--green); color:var(--green);}
+  .dot.warn{background:var(--amber); color:var(--amber); animation:pulse 1.2s infinite;}
+  .dot.bad{background:var(--red); color:var(--red);}
+  @keyframes pulse{50%{opacity:.35}}
+  .spacer{flex:1;}
+  .tbtn{background:var(--card2); color:var(--txt); border:1px solid var(--line); border-radius:12px;
+    font-size:20px; line-height:1; padding:9px 12px; cursor:pointer; min-width:48px; min-height:44px;}
+  .tbtn.active{background:var(--accent); color:#1a1200; border-color:var(--accent); font-weight:700;}
+  select.preset{background:var(--card2); color:var(--txt); border:1px solid var(--line); border-radius:12px;
+    font-size:14px; padding:10px 8px; max-width:150px;}
+  /* ---------- grid ---------- */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:10px;
+    padding:12px; padding-bottom:calc(90px + env(safe-area-inset-bottom));}
+  .ctl{background:var(--card); border:1px solid var(--line); border-radius:16px; position:relative;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:96px; padding:10px; user-select:none; -webkit-user-select:none; overflow:hidden;}
+  .ctl .lab{font-size:14px; font-weight:600; text-align:center; pointer-events:none; line-height:1.25;}
+  .ctl .sub{font-size:10px; color:var(--dim); margin-top:3px; pointer-events:none; text-align:center;}
+  .ctl .val{font-size:11px; color:var(--accent); margin-top:2px; pointer-events:none; font-variant-numeric:tabular-nums;}
+  /* buttons */
+  .ctl.btn{touch-action:none; cursor:pointer; min-height:104px;}
+  .ctl.btn.pressed, .ctl.btn.on{background:var(--accent); border-color:var(--accent);}
+  .ctl.btn.pressed .lab, .ctl.btn.pressed .sub, .ctl.btn.pressed .val,
+  .ctl.btn.on .lab, .ctl.btn.on .sub, .ctl.btn.on .val{color:#1a1200;}
+  .ctl.btn.pressed .val, .ctl.btn.on .val{color:#4a2f00;}
+  /* sliders */
+  .ctl.slider{padding:12px 10px; touch-action:none;}
+  .ctl.slider.v{min-height:230px; grid-row:span 2;}
+  .ctl.slider.h{grid-column:span 2; min-height:104px;}
+  .track{position:relative; background:#0a0c11; border:1px solid var(--line); border-radius:10px; pointer-events:none;}
+  .v .track{width:44px; flex:1; min-height:120px;}
+  .h .track{height:44px; width:100%;}
+  .fill{position:absolute; background:linear-gradient(180deg,#ffd27a,var(--accent)); border-radius:8px;}
+  .v .fill{left:4px; right:4px; bottom:4px;}
+  .h .fill{top:4px; bottom:4px; left:4px;}
+  /* xy pad */
+  .ctl.xy{grid-column:span 2; aspect-ratio:1.15; touch-action:none; padding:8px;}
+  .pad{position:relative; flex:1; width:100%; background:#0a0c11; border:1px solid var(--line);
+    border-radius:12px; pointer-events:none; overflow:hidden;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:25% 25%; background-position:center;}
+  .xydot{position:absolute; width:44px; height:44px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 14px rgba(255,176,32,.7); transform:translate(-50%,-50%); left:50%; top:50%;}
+  /* rotary knob */
+  .ctl.knob{touch-action:none; min-height:176px;}
+  .dial{width:104px; height:104px; pointer-events:none; margin:3px 0; flex:none;}
+  .dial svg{width:100%; height:100%; display:block; overflow:visible;}
+  .k-track{fill:none; stroke:#252d42; stroke-width:9; stroke-linecap:round;}
+  .k-fill{fill:none; stroke:var(--accent); stroke-width:9; stroke-linecap:round;
+    filter:drop-shadow(0 0 5px rgba(255,176,32,.55));}
+  .k-needle{stroke:var(--txt); stroke-width:4.5; stroke-linecap:round;}
+  .k-cap{fill:var(--accent);}
+  /* edit mode */
+  body.editing .ctl{border-style:dashed; border-color:var(--accent-d); padding-top:38px;}
+  .cardtools{position:absolute; top:4px; left:4px; right:4px; display:none; justify-content:space-between; z-index:5;}
+  body.editing .cardtools{display:flex;}
+  .cardtools button{background:#000a; color:#fff; border:1px solid var(--line); border-radius:8px;
+    font-size:13px; padding:5px 8px; min-width:34px; min-height:32px; cursor:pointer;}
+  .cardtools .del{color:var(--red); font-weight:700;}
+  .addcard{border:2px dashed var(--line); color:var(--dim); font-size:15px; cursor:pointer; min-height:96px;}
+  body.editing .addcard{display:flex;} .addcard{display:none;}
+  .addcard .plus{font-size:30px; color:var(--accent);}
+  /* ---------- sheets ---------- */
+  .backdrop{position:fixed; inset:0; background:#000a; z-index:40; display:none;}
+  .backdrop.show{display:block;}
+  .sheet{position:fixed; left:0; right:0; bottom:0; z-index:41; background:#141924;
+    border-top:1px solid var(--line); border-radius:20px 20px 0 0; padding:16px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height:86vh; overflow-y:auto; transform:translateY(105%); transition:transform .22s ease;}
+  .sheet.show{transform:translateY(0);}
+  .sheet h2{margin:0 0 4px; font-size:18px;}
+  .sheet p.hint{color:var(--dim); font-size:13px; margin:0 0 12px;}
+  .frow{margin:10px 0;}
+  .frow label{display:block; font-size:12px; color:var(--dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:.8px;}
+  .frow input, .frow select{width:100%; background:#0d1119; color:var(--txt); border:1px solid var(--line);
+    border-radius:10px; font-size:16px; padding:11px 12px;}
+  .frow .row2{display:flex; gap:10px;} .frow .row2>*{flex:1;}
+  .typerow{display:flex; gap:10px; margin:6px 0 12px;}
+  .typebtn{flex:1; background:var(--card2); border:1px solid var(--line); color:var(--txt); border-radius:14px;
+    padding:14px 6px; font-size:15px; font-weight:600; cursor:pointer;}
+  .typebtn small{display:block; font-weight:400; color:var(--dim); font-size:11px; margin-top:3px;}
+  .typebtn.sel{background:var(--accent); color:#1a1200; border-color:var(--accent);}
+  .typebtn.sel small{color:#4a2f00;}
+  .btnrow{display:flex; gap:10px; margin-top:16px;}
+  .big{background:var(--accent); color:#1a1200; border:0; border-radius:14px; font-size:17px; font-weight:700;
+    padding:15px; flex:2; cursor:pointer;}
+  .ghost{background:var(--card2); color:var(--txt); border:1px solid var(--line); border-radius:14px;
+    font-size:16px; padding:15px; flex:1; cursor:pointer;}
+  .danger{background:#3a1414; color:var(--red); border:1px solid #5c2222; border-radius:14px;
+    font-size:16px; padding:15px; flex:1; cursor:pointer;}
+  .seg{display:flex; border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .seg button{flex:1; background:#0d1119; color:var(--dim); border:0; padding:11px; font-size:15px; cursor:pointer;}
+  .seg button.sel{background:var(--accent); color:#1a1200; font-weight:700;}
+  .checkrow{display:flex; align-items:center; gap:10px; font-size:16px; padding:6px 0;}
+  .checkrow input{width:24px; height:24px; accent-color:var(--accent);}
+  /* toast */
+  #toast{position:fixed; left:50%; bottom:calc(26px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px);
+    background:#222a3d; color:var(--txt); border:1px solid var(--line); padding:12px 18px; border-radius:12px;
+    font-size:14px; z-index:60; opacity:0; pointer-events:none; transition:all .25s; max-width:88vw; text-align:center;}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .footbar{position:fixed; bottom:0; left:0; right:0; z-index:15; display:flex; gap:8px; justify-content:center;
+    padding:8px 12px calc(10px + env(safe-area-inset-bottom)); background:rgba(11,13,18,.9);
+    border-top:1px solid var(--line); font-size:11px; color:var(--dim);}
+  .footbar button{background:none; border:0; color:var(--dim); font-size:12px; text-decoration:underline; cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:9px;">
+    <div class="dot warn" id="dot"></div>
+    <div class="brand">vj-remote<small>RESOLUME PAD</small></div>
+  </div>
+  <div class="spacer"></div>
+  <select class="preset" id="presetSel" title="Starter layouts">
+    <option value="">Layout…</option>
+    <option value="essentials">VJ Essentials</option>
+    <option value="fx">FX Playground</option>
+    <option value="blank">Blank</option>
+  </select>
+  <button class="tbtn" id="editBtn" title="Edit layout">✎</button>
+  <button class="tbtn" id="setupBtn" title="Setup &amp; QR" onclick="location.href='/setup'">⛶</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<div class="sheet" id="addSheet">
+  <h2 id="addTitle">Add control</h2>
+  <p class="hint" id="addHint">Pick a type, then what it should drive in Resolume. No addresses to type — unless you want to.</p>
+  <div id="addBody"></div>
+  <div class="btnrow">
+    <button class="ghost" id="addCancel">Cancel</button>
+    <button class="big" id="addGo">Add control</button>
+  </div>
+</div>
+
+<div class="sheet" id="cfgSheet">
+  <h2>Configure control</h2>
+  <p class="hint">Everything here saves instantly.</p>
+  <div id="cfgBody"></div>
+  <div class="btnrow">
+    <button class="danger" id="cfgDelete">Delete</button>
+    <button class="big" id="cfgDone">Done</button>
+  </div>
+</div>
+
+<div class="footbar">
+  <span id="statline">connecting…</span>
+  <button id="expBtn">export</button><button id="impBtn">import</button>
+  <input type="file" id="impFile" accept="application/json" style="display:none">
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   vj-remote — phone OSC surface for Resolume. Vanilla JS, no deps.
+   ============================================================ */
+
+/* ---------- binding catalog: human names -> real OSC addresses ---------- */
+const BINDINGS = {
+  "trigger-clip":  {group:"Triggers", label:"Trigger clip",      params:["layer","clip"],        kind:"event",
+                    addr:p=>`/composition/layers/${p.layer}/clips/${p.clip}/connect`, sug:p=>`L${p.layer}·C${p.clip}`},
+  "column-fire":   {group:"Triggers", label:"Fire column",       params:["column"],              kind:"event",
+                    addr:p=>`/composition/columns/${p.column}/connect`, sug:p=>`Col ${p.column}`},
+  "clear-layer":   {group:"Triggers", label:"Clear layer",       params:["layer"],               kind:"event",
+                    addr:p=>`/composition/layers/${p.layer}/clear`, sug:p=>`Clear L${p.layer}`},
+  "disconnect-all":{group:"Triggers", label:"Stop everything",   params:[],                      kind:"event",
+                    addr:()=>`/composition/disconnectall`, sug:()=>`STOP`},
+  "tap-tempo":     {group:"Tempo",    label:"Tap tempo",         params:[],                      kind:"event",
+                    addr:()=>`/composition/tempocontroller/tempotap`, sug:()=>`TAP`},
+  "bpm-set":       {group:"Tempo",    label:"Set BPM",           params:["minBpm","maxBpm"],      kind:"bpm",
+                    addr:()=>`/composition/tempocontroller/tempo`, sug:()=>`BPM`},
+  "layer-opacity": {group:"Faders",   label:"Layer opacity",     params:["layer"],               kind:"float",
+                    addr:p=>`/composition/layers/${p.layer}/video/opacity`, sug:p=>`L${p.layer} op`},
+  "clip-opacity":  {group:"Faders",   label:"Clip opacity",      params:["layer","clip"],        kind:"float",
+                    addr:p=>`/composition/layers/${p.layer}/clips/${p.clip}/video/opacity`, sug:p=>`L${p.layer}C${p.clip} op`},
+  "layer-speed":   {group:"Faders",   label:"Layer speed",       params:["layer"],               kind:"float",
+                    addr:p=>`/composition/layers/${p.layer}/speed`, sug:p=>`L${p.layer} spd`},
+  "master-opacity":{group:"Faders",   label:"Master opacity",    params:[],                      kind:"float",
+                    addr:()=>`/composition/video/opacity`, sug:()=>`Master`},
+  "master-speed":  {group:"Faders",   label:"Master speed",      params:[],                      kind:"float",
+                    addr:()=>`/composition/speed`, sug:()=>`M.Speed`},
+  "effect-param":  {group:"Faders",   label:"Effect parameter",  params:["layer","effect","param"], kind:"float",
+                    addr:p=>`/composition/layers/${p.layer}/video/effects/${p.effect}/${p.param}`,
+                    sug:p=>`${p.effect}·${p.param}`,
+                    hint:"Effect & param names must match Resolume's internal names (lowercase, e.g. effect “goo”, param “speed”). Confirm via Shortcuts → Edit OSC in Resolume."},
+  "layer-bypass":  {group:"Toggles",  label:"Bypass layer",      params:["layer"],               kind:"toggle",
+                    addr:p=>`/composition/layers/${p.layer}/bypassed`, sug:p=>`L${p.layer} bypass`},
+  "effect-bypass": {group:"Toggles",  label:"Bypass effect",     params:["layer","effect"],      kind:"toggle",
+                    addr:p=>`/composition/layers/${p.layer}/video/effects/${p.effect}/bypassed`, sug:p=>`${p.effect} off`},
+  "comp-bypass":   {group:"Toggles",  label:"Bypass composition",params:[],                      kind:"toggle",
+                    addr:()=>`/composition/bypassed`, sug:()=>`Bypass all`},
+  "custom":        {group:"Advanced",  label:"Custom address…",   params:["address"],             kind:"custom",
+                    addr:p=>p.address, sug:p=>p.address.split("/").pop()||"custom",
+                    hint:"Full OSC address, e.g. /composition/layers/1/video/mixer/blendmode. Arg type int sends 0/1, float sends 0.0–1.0."},
+};
+const PARAM_DEFS = {
+  layer:  {label:"Layer #",   type:"number", def:1, min:1, max:32},
+  clip:   {label:"Clip #",    type:"number", def:1, min:1, max:64},
+  column: {label:"Column #",  type:"number", def:1, min:1, max:64},
+  effect: {label:"Effect name", type:"text", def:"goo", hint:"lowercase, as in Edit OSC"},
+  param:  {label:"Parameter", type:"text", def:"speed"},
+  address:{label:"OSC address", type:"text", def:"/composition/"},
+  minBpm: {label:"Min BPM",   type:"number", def:60, min:20, max:300},
+  maxBpm: {label:"Max BPM",   type:"number", def:180, min:20, max:300},
+};
+/* which binding kinds each control type may use */
+const KIND_OK = {
+  button:["event","toggle","custom"],
+  slider:["float","bpm","custom"],
+  xy:["float","custom"],
+  knob:["float","bpm","custom"],
+};
+
+/* ---------- starter presets ---------- */
+function mkid(){ return "c"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function B(type, label, binding, extra){
+  return Object.assign({id:mkid(), type, label, binding}, extra||{});
+}
+function BB(kind, p){ return {kind, p}; }
+const PRESETS = {
+  essentials:[
+    ...[1,2,3,4,5,6,7,8].map(c=>B("button","C"+c,BB("trigger-clip",{layer:1,clip:c}),{behavior:"momentary"})),
+    B("button","TAP",BB("tap-tempo",{}),{behavior:"momentary"}),
+    B("button","STOP",BB("disconnect-all",{}),{behavior:"momentary"}),
+    B("slider","L1 op",BB("layer-opacity",{layer:1}),{orientation:"v",min:0,max:1}),
+    B("slider","L2 op",BB("layer-opacity",{layer:2}),{orientation:"v",min:0,max:1}),
+    B("slider","Master",BB("master-opacity",{}),{orientation:"v",min:0,max:1}),
+  ],
+  fx:[
+    B("xy","Blur / Hue",{x:BB("effect-param",{layer:1,effect:"goo",param:"speed"}),
+                         y:BB("effect-param",{layer:1,effect:"hue rotate",param:"hue"})},{spring:true}),
+    B("button","Goo off",BB("effect-bypass",{layer:1,effect:"goo"}),{behavior:"toggle"}),
+    B("button","L1 bypass",BB("layer-bypass",{layer:1}),{behavior:"toggle"}),
+    B("slider","Master",BB("master-opacity",{}),{orientation:"v",min:0,max:1}),
+    B("slider","L1 speed",BB("layer-speed",{layer:1}),{orientation:"h",min:0,max:1}),
+    B("knob","Goo speed",BB("effect-param",{layer:1,effect:"goo",param:"speed"}),{min:0,max:1,def:0.5}),
+    B("knob","Trails",BB("effect-param",{layer:1,effect:"trails",param:"decay"}),{min:0,max:1,def:0}),
+  ],
+  blank:[],
+};
+
+/* ---------- state ---------- */
+const LS_KEY = "vjremote.layout.v1";
+let layout = {name:"My layout", controls:[]};
+let editing = false;
+
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(layout)); }catch(e){} }
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ const l = JSON.parse(raw); if(l && Array.isArray(l.controls)){ layout = l; return; } }
+  }catch(e){}
+  layout = {name:"VJ Essentials", controls:PRESETS.essentials.map(c=>JSON.parse(JSON.stringify(c)))};
+}
+
+/* ---------- toast ---------- */
+let toastT=null;
+function toast(msg, ms){
+  const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), ms||2200);
+}
+
+/* ---------- websocket ---------- */
+const dot=document.getElementById("dot"), statline=document.getElementById("statline");
+let ws=null, wsAttempt=0, wsTimer=null, lastFailToast=0;
+function setDot(cls, txt){ dot.className="dot "+cls; if(txt) statline.textContent=txt; }
+function wsUrl(){ return (location.protocol==="https:"?"wss://":"ws://")+location.host+"/ctl"; }
+function connect(){
+  clearTimeout(wsTimer);
+  setDot("warn","connecting…");
+  try{ ws=new WebSocket(wsUrl()); }catch(e){ schedule(); return; }
+  ws.onopen=()=>{ wsAttempt=0; setDot("ok","connected — tap something"); };
+  ws.onclose=()=>{ ws=null; schedule(); };
+  ws.onerror=()=>{ try{ws.close();}catch(e){} };
+  ws.onmessage=(ev)=>{
+    try{ const m=JSON.parse(ev.data); if(m && m.ok===false) sendFailed(m.error||"bridge error"); }catch(e){}
+  };
+}
+function schedule(){
+  wsAttempt++;
+  const d=Math.min(30000, 1000*Math.pow(2, wsAttempt-1));
+  setDot(wsAttempt>3?"bad":"warn", "reconnecting…");
+  wsTimer=setTimeout(connect, d);
+}
+function sendFailed(why){
+  setDot("bad","send failed");
+  setTimeout(()=>{ if(ws&&ws.readyState===1) setDot("ok","connected — tap something"); }, 1200);
+  const now=Date.now();
+  if(now-lastFailToast>3000){ lastFailToast=now; toast("Couldn't reach Resolume ("+(why||"link down")+")"); }
+  if(navigator.vibrate) navigator.vibrate([40,40,40]);
+}
+function send(address, args){
+  if(ws && ws.readyState===1){ ws.send(JSON.stringify({address, args})); }
+  else sendFailed("not connected");
+}
+function buzz(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||8); }catch(e){} }
+
+/* ---------- keep screen awake (best effort) ---------- */
+let wakeLock=null;
+async function keepAwake(){
+  try{ if("wakeLock" in navigator){ wakeLock=await navigator.wakeLock.request("screen"); } }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") keepAwake(); });
+
+/* ---------- send helpers per binding ---------- */
+function bindingAddr(b){ return BINDINGS[b.kind].addr(b.p||{}); }
+function fireEvent(b){ send(bindingAddr(b),[{type:"i",value:1}]); }            // triggers: int 1
+function sendToggle(b,on){ send(bindingAddr(b),[{type:"i",value:on?1:0}]); }   // toggles: int 0/1
+function sendFloat(b,v){ // faders: float, scaled by control min/max (or BPM range)
+  const k=BINDINGS[b.kind].kind;
+  let val;
+  if(k==="bpm"){ val=b.p.minBpm+(b.p.maxBpm-b.p.minBpm)*v; }
+  else { const mn=b._min??0, mx=b._max??1; val=mn+(mx-mn)*v; if(b._int) val=Math.round(val); }
+  send(bindingAddr(b),[{type:"f",value:+val.toFixed(4)}]);
+}
+
+/* ---------- render ---------- */
+const grid=document.getElementById("grid");
+function sublabel(c){
+  const b=c.binding;
+  if(c.type==="xy") return "X·Y pad";
+  const k=BINDINGS[b.kind];
+  return k? k.addr(b.p||{}) : "";
+}
+function render(){
+  grid.innerHTML="";
+  layout.controls.forEach((c,idx)=>{
+    const el=document.createElement("div");
+    el.className="ctl "+c.type+(c.type==="slider"?(c.orientation==="h"?" h":" v"):"");
+    el.dataset.id=c.id;
+    const tools=document.createElement("div"); tools.className="cardtools";
+    tools.innerHTML=`<button data-a="left" title="move left">◀</button>
+                     <button data-a="del" class="del" title="delete">✕</button>
+                     <button data-a="right" title="move right">▶</button>`;
+    tools.addEventListener("click",ev=>{
+      ev.stopPropagation();
+      const a=ev.target.dataset.a; if(!a) return;
+      if(a==="del"){ layout.controls.splice(idx,1); save(); render(); toast("Deleted"); }
+      if(a==="left"&&idx>0){ [layout.controls[idx-1],layout.controls[idx]]=[layout.controls[idx],layout.controls[idx-1]]; save(); render(); }
+      if(a==="right"&&idx<layout.controls.length-1){ [layout.controls[idx+1],layout.controls[idx]]=[layout.controls[idx],layout.controls[idx+1]]; save(); render(); }
+    });
+    el.appendChild(tools);
+    const lab=document.createElement("div"); lab.className="lab"; lab.textContent=c.label; el.appendChild(lab);
+    const sub=document.createElement("div"); sub.className="sub"; sub.textContent=shortAddr(c); el.appendChild(sub);
+    const val=document.createElement("div"); val.className="val"; el.appendChild(val);
+
+    if(c.type==="button") wireButton(el,c,val);
+    if(c.type==="slider") wireSlider(el,c,val);
+    if(c.type==="xy") wireXY(el,c,val);
+    if(c.type==="knob") wireKnob(el,c,val);
+
+    el.addEventListener("click",()=>{ if(editing) openCfg(c.id); });
+    grid.appendChild(el);
+  });
+  const add=document.createElement("div");
+  add.className="ctl addcard"; add.id="addCard";
+  add.innerHTML=`<div class="plus">+</div><div>Add control</div>`;
+  add.addEventListener("click",openAdd);
+  grid.appendChild(add);
+}
+function shortAddr(c){
+  const b=c.binding;
+  if(c.type==="xy"){ return "X·Y"; }
+  const k=BINDINGS[b.kind];
+  if(!k) return "";
+  const segs=k.addr(b.p||{}).split("/").filter(Boolean);
+  return segs.slice(-2).join("/");   // e.g. "clips/1/connect", "video/opacity"
+}
+
+/* ---------- button ---------- */
+function wireButton(el,c,val){
+  el.classList.add("btn");
+  const kind=BINDINGS[c.binding.kind].kind;
+  const isEvent=kind==="event";
+  const behavior=isEvent?"momentary":(c.behavior||"toggle");
+  let on=false;
+  const paint=()=>{ el.classList.toggle("on",on); el.classList.toggle("pressed",pressed); };
+  let pressed=false;
+  const press=(e)=>{
+    if(e) e.preventDefault();
+    if(editing) return;
+    pressed=true; paint(); buzz();
+    if(isEvent){ fireEvent(c.binding); }
+    else if(behavior==="momentary"){ sendToggle(c.binding,true); }
+    else { on=!on; sendToggle(c.binding,on); paint(); }
+  };
+  const release=()=>{
+    if(!pressed||editing) return;
+    pressed=false; paint();
+    if(!isEvent&&behavior==="momentary") sendToggle(c.binding,false);
+  };
+  el.addEventListener("pointerdown",press);
+  el.addEventListener("pointerup",release);
+  el.addEventListener("pointercancel",release);
+  el.addEventListener("pointerleave",release);
+  el.addEventListener("contextmenu",e=>e.preventDefault());
+  if(!isEvent) val.textContent=behavior==="toggle"?"tap to toggle":"hold";
+}
+
+/* ---------- slider ---------- */
+function wireSlider(el,c,val){
+  const track=document.createElement("div"); track.className="track";
+  const fill=document.createElement("div"); fill.className="fill"; track.appendChild(fill);
+  el.insertBefore(track, el.querySelector(".val"));
+  let v=(c._v??0.5);
+  const isBpm=BINDINGS[c.binding.kind].kind==="bpm";
+  const show=()=>{
+    if(isBpm){ const b=c.binding.p; val.textContent=Math.round(b.minBpm+(b.maxBpm-b.minBpm)*v)+" BPM"; }
+    else val.textContent=Math.round(v*100)+"%";
+    if(c.orientation==="h"){ fill.style.width=`calc(${(v*100).toFixed(1)}% - 4px)`; }
+    else { fill.style.height=`calc(${(v*100).toFixed(1)}% - 4px)`; }
+  };
+  const setFromEvent=(e)=>{
+    const r=track.getBoundingClientRect();
+    if(c.orientation==="h") v=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));
+    else v=Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height));
+    c._v=v; show(); sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+  };
+  // NOTE: listeners go on the card, not the track — the track has
+  // pointer-events:none (like every other control visual), so a listener
+  // attached to it would never fire.
+  el.addEventListener("pointerdown",e=>{ if(editing) return; e.preventDefault(); el.setPointerCapture(e.pointerId); setFromEvent(e); buzz(5); });
+  el.addEventListener("pointermove",e=>{ if(editing||!el.hasPointerCapture(e.pointerId)) return; setFromEvent(e); });
+  show();
+}
+
+/* ---------- XY pad ---------- */
+function wireXY(el,c,val){
+  const pad=document.createElement("div"); pad.className="pad";
+  const dot=document.createElement("div"); dot.className="xydot"; pad.appendChild(dot);
+  el.insertBefore(pad, el.querySelector(".val"));
+  let x=(c._x??0.5), y=(c._y??0.5);
+  const show=()=>{
+    dot.style.left=(x*100)+"%"; dot.style.top=((1-y)*100)+"%";
+    val.textContent=`X ${Math.round(x*100)} · Y ${Math.round(y*100)}`;
+  };
+  const setFromEvent=(e)=>{
+    const r=pad.getBoundingClientRect();
+    x=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));
+    y=Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height));
+    c._x=x; c._y=y; show();
+    sendFloat(Object.assign({},c.binding,{p:c.binding.x.p,_min:0,_max:1}),x);
+    sendFloat(Object.assign({},c.binding,{p:c.binding.y.p,_min:0,_max:1}),y);
+  };
+  // NOTE: listeners go on the card, not the pad — the pad has
+  // pointer-events:none (like every other control visual), so a listener
+  // attached to it would never fire.
+  el.addEventListener("pointerdown",e=>{ if(editing) return; e.preventDefault(); el.setPointerCapture(e.pointerId); setFromEvent(e); buzz(5); });
+  el.addEventListener("pointermove",e=>{ if(editing||!el.hasPointerCapture(e.pointerId)) return; setFromEvent(e); });
+  el.addEventListener("pointerup",()=>{
+    if(editing||!c.spring) return;
+    // spring back to center with a few eased steps
+    const sx=x, sy=y, steps=6; let i=0;
+    const tick=()=>{ i++; const t=i/steps, e2=1-Math.pow(1-t,3);
+      x=sx+(0.5-sx)*e2; y=sy+(0.5-sy)*e2; c._x=x; c._y=y; show();
+      sendFloat(Object.assign({},c.binding,{p:c.binding.x.p,_min:0,_max:1}),x);
+      sendFloat(Object.assign({},c.binding,{p:c.binding.y.p,_min:0,_max:1}),y);
+      if(i<steps) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+  show();
+}
+
+/* ---------- rotary knob ---------- */
+/* vertical-drag interaction (drag up = clockwise = increase), like DJ apps.
+   Listeners live on the card; the dial visual is pointer-events:none. */
+const KNOB_A0=225, KNOB_SWEEP=270, KNOB_DRAG_PX=180; // full 0..1 over this many px
+// A0=225° puts min at 7:30 (bottom-left), mid at 12:00, max at 4:30 (bottom-right) —
+// 0° is 12 o'clock and angles run clockwise, so the 90° gap sits at the bottom.
+function kpolar(cx,cy,r,deg){ const a=deg*Math.PI/180; return [cx+r*Math.sin(a), cy-r*Math.cos(a)]; }
+function karc(cx,cy,r,a0,a1){
+  const p0=kpolar(cx,cy,r,a0), p1=kpolar(cx,cy,r,a1);
+  return `M ${p0[0].toFixed(2)} ${p0[1].toFixed(2)} A ${r} ${r} 0 ${(a1-a0)>180?1:0} 1 ${p1[0].toFixed(2)} ${p1[1].toFixed(2)}`;
+}
+function wireKnob(el,c,val){
+  const dial=document.createElement("div"); dial.className="dial";
+  dial.innerHTML=`<svg viewBox="0 0 100 100">
+      <path class="k-track" d="${karc(50,50,38,KNOB_A0,KNOB_A0+KNOB_SWEEP)}"/>
+      <path class="k-fill" d=""/>
+      <line class="k-needle" x1="50" y1="50" x2="50" y2="18"/>
+      <circle class="k-cap" cx="50" cy="50" r="5"/></svg>`;
+  el.insertBefore(dial, el.querySelector(".val"));
+  const fill=dial.querySelector(".k-fill"), needle=dial.querySelector(".k-needle");
+  const isBpm=BINDINGS[c.binding.kind].kind==="bpm";
+  let v=Math.min(1,Math.max(0,(c._v??(c.def??0.5))));
+  const show=()=>{
+    const ang=KNOB_A0+KNOB_SWEEP*v;
+    fill.setAttribute("d", v<0.005 ? "" : karc(50,50,38,KNOB_A0,ang));
+    const tip=kpolar(50,50,28,ang);
+    needle.setAttribute("x2",tip[0].toFixed(2)); needle.setAttribute("y2",tip[1].toFixed(2));
+    if(isBpm){ const b=c.binding.p; val.textContent=Math.round(b.minBpm+(b.maxBpm-b.minBpm)*v)+" BPM"; }
+    else val.textContent=Math.round(v*100)+"%";
+  };
+  const setVal=(nv,fire)=>{
+    v=Math.min(1,Math.max(0,nv));
+    c._v=v; show();
+    if(fire!==false) sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+  };
+  let startY=0, startV=0, moved=0, activePid=null, lastTap=0;
+  el.addEventListener("pointerdown",e=>{
+    if(editing) return; e.preventDefault();
+    activePid=e.pointerId; startY=e.clientY; startV=v; moved=0;
+    el.setPointerCapture(e.pointerId); buzz(5);
+  });
+  el.addEventListener("pointermove",e=>{
+    if(editing||e.pointerId!==activePid||!el.hasPointerCapture(e.pointerId)) return;
+    moved=Math.max(moved,Math.abs(e.clientY-startY));
+    setVal(startV+(startY-e.clientY)/KNOB_DRAG_PX);
+  });
+  const release=e=>{
+    if(e.pointerId!==activePid) return; activePid=null;
+    if(editing) return;
+    const now=Date.now();
+    if(moved<10&&now-lastTap<350){ setVal(c.def??0.5); lastTap=0; toast("Reset to default"); } // double-tap = reset
+    else lastTap=now;
+  };
+  el.addEventListener("pointerup",release);
+  el.addEventListener("pointercancel",()=>{ activePid=null; });
+  el.addEventListener("contextmenu",e=>e.preventDefault());
+  show();
+}
+
+/* ---------- sheets ---------- */
+const backdrop=document.getElementById("backdrop");
+function showSheet(id){ backdrop.classList.add("show"); document.getElementById(id).classList.add("show"); }
+function hideSheets(){ backdrop.classList.remove("show"); document.querySelectorAll(".sheet").forEach(s=>s.classList.remove("show")); }
+backdrop.addEventListener("click",hideSheets);
+
+function kindOptions(forType, sel){
+  const groups={};
+  for(const [key,k] of Object.entries(BINDINGS)){
+    if(!KIND_OK[forType].includes(k.kind)) continue;
+    (groups[k.group]=groups[k.group]||[]).push([key,k]);
+  }
+  return Object.entries(groups).map(([g,ks])=>
+    `<optgroup label="${g}">`+ks.map(([key,k])=>
+      `<option value="${key}"${key===sel?" selected":""}>${k.label}</option>`).join("")+`</optgroup>`
+  ).join("");
+}
+function paramInputs(kindKey, p, prefix){
+  const k=BINDINGS[kindKey];
+  return k.params.map(pn=>{
+    const d=PARAM_DEFS[pn], v=(p&&p[pn]!==undefined)?p[pn]:d.def;
+    const inp=d.type==="number"
+      ? `<input type="number" data-p="${prefix}${pn}" value="${v}" min="${d.min}" max="${d.max}">`
+      : `<input type="text" data-p="${prefix}${pn}" value="${String(v).replace(/"/g,"&quot;")}" ${d.hint?`placeholder="${d.hint}"`:""}>`;
+    return `<div class="frow"><label>${d.label}</label>${inp}</div>`;
+  }).join("") + (k.hint?`<p class="hint">${k.hint}</p>`:"");
+}
+function readParams(scope, prefix){
+  const p={};
+  scope.querySelectorAll(`[data-p]`).forEach(inp=>{
+    const name=inp.dataset.p.replace(prefix,"");
+    p[name]=inp.type==="number"? (+inp.value||0) : inp.value.trim();
+  });
+  return p;
+}
+
+/* ----- add sheet ----- */
+let addType="button", addKind="trigger-clip";
+function openAdd(){
+  addType="button"; addKind="trigger-clip";
+  drawAdd(); showSheet("addSheet");
+}
+function drawAdd(){
+  const body=document.getElementById("addBody");
+  const kindFor={button:"trigger-clip",slider:"layer-opacity",xy:"effect-param",knob:"layer-opacity"}[addType];
+  const tName=t=>t==="button"?"Button":t==="slider"?"Slider":t==="xy"?"XY pad":"Knob";
+  const tSub=t=>t==="button"?"tap / hold":t==="slider"?"fader":t==="xy"?"joystick":"rotary";
+  if(!KIND_OK[addType].includes(BINDINGS[addKind].kind)) addKind=kindFor;
+  body.innerHTML=`
+    <div class="frow"><label>Control type</label><div class="typerow">
+      ${["button","slider","xy","knob"].map(t=>`
+        <button class="typebtn${t===addType?" sel":""}" data-t="${t}">${tName(t)}<small>${tSub(t)}</small></button>`).join("")}
+    </div></div>
+    <div class="frow"><label>What it drives in Resolume</label>
+      <select id="addKindSel">${kindOptions(addType,addKind)}</select></div>
+    <div id="addParams">${paramInputs(addKind,{},"")}</div>
+    <div class="frow"><label>Label</label><input id="addLabel" type="text"></div>`;
+  const sug=BINDINGS[addKind].sug(readParams(body,""));
+  body.querySelector("#addLabel").value=sug;
+  body.querySelectorAll(".typebtn").forEach(b=>b.addEventListener("click",()=>{ addType=b.dataset.t; drawAdd(); }));
+  const ks=body.querySelector("#addKindSel");
+  ks.addEventListener("change",()=>{ addKind=ks.value; drawAdd(); });
+  body.querySelector("#addParams").addEventListener("input",()=>{
+    const l=body.querySelector("#addLabel");
+    if(!l.dataset.touched) l.value=BINDINGS[addKind].sug(readParams(body,""));
+  });
+  body.querySelector("#addLabel").addEventListener("input",e=>{ e.target.dataset.touched="1"; });
+}
+document.getElementById("addCancel").addEventListener("click",hideSheets);
+document.getElementById("addGo").addEventListener("click",()=>{
+  const body=document.getElementById("addBody");
+  const p=readParams(body,"");
+  const label=body.querySelector("#addLabel").value.trim()||BINDINGS[addKind].sug(p);
+  let c;
+  if(addType==="button") c=B("button",label,{kind:addKind,p},{behavior:BINDINGS[addKind].kind==="event"?"momentary":"toggle"});
+  else if(addType==="slider") c=B("slider",label,{kind:addKind,p},{orientation:"v",min:0,max:1});
+  else if(addType==="knob") c=B("knob",label,{kind:addKind,p},{min:0,max:1,def:0.5});
+  else {
+    // xy: reuse the same kind for a second axis prompt — ask via the same sheet is overkill;
+    // default: X = chosen binding, Y = chosen binding (edit after to change Y).
+    c=B("xy",label,{x:{kind:addKind,p:Object.assign({},p)},y:{kind:addKind,p:Object.assign({},p)}},{spring:true});
+  }
+  layout.controls.push(c); save(); render(); hideSheets();
+  toast("Added “"+label+"”");
+  openCfg(c.id); // jump straight into configure so Y axis / options get set
+});
+
+/* ----- config sheet ----- */
+let cfgId=null;
+function openCfg(id){
+  cfgId=id;
+  const c=layout.controls.find(x=>x.id===id); if(!c) return;
+  const body=document.getElementById("cfgBody");
+  const k=BINDINGS[c.binding.kind];
+  let h=`<div class="frow"><label>Label</label><input id="cfgLabel" type="text" value="${c.label.replace(/"/g,"&quot;")}"></div>`;
+  if(c.type==="xy"){
+    h+=`<div class="frow"><label>X axis drives</label><select id="cfgKx">${kindOptions("xy",c.binding.x.kind)}</select></div>
+        <div id="cfgPx">${paramInputs(c.binding.x.kind,c.binding.x.p,"x.")}</div>
+        <div class="frow"><label>Y axis drives</label><select id="cfgKy">${kindOptions("xy",c.binding.y.kind)}</select></div>
+        <div id="cfgPy">${paramInputs(c.binding.y.kind,c.binding.y.p,"y.")}</div>
+        <div class="checkrow"><input type="checkbox" id="cfgSpring"${c.spring?" checked":""}><label for="cfgSpring">Spring back to center on release</label></div>`;
+  } else {
+    h+=`<div class="frow"><label>Drives</label><select id="cfgK">${kindOptions(c.type,c.binding.kind)}</select></div>
+        <div id="cfgP">${paramInputs(c.binding.kind,c.binding.p,"")}</div>`;
+    if(c.type==="button"&&k.kind!=="event"){
+      h+=`<div class="frow"><label>Behavior</label><div class="seg" id="cfgBeh">
+            <button data-v="momentary" class="${(c.behavior||"toggle")==="momentary"?"sel":""}">Momentary</button>
+            <button data-v="toggle" class="${(c.behavior||"toggle")==="toggle"?"sel":""}">Toggle</button></div></div>`;
+    }
+    if((c.type==="slider"||c.type==="knob")&&BINDINGS[c.binding.kind].kind!=="bpm"){
+      if(c.type==="slider"){
+        h+=`<div class="frow"><label>Orientation</label><div class="seg" id="cfgOri">
+              <button data-v="v" class="${(c.orientation||"v")==="v"?"sel":""}">Vertical</button>
+              <button data-v="h" class="${(c.orientation||"h")==="h"?"sel":""}">Horizontal</button></div></div>`;
+      }
+      h+=`<div class="frow"><label>Value range (sends float min → max)</label><div class="row2">
+            <input id="cfgMin" type="number" step="0.01" value="${c.min??0}"><input id="cfgMax" type="number" step="0.01" value="${c.max??1}">
+          </div></div>`;
+      if(c.type==="knob"){
+        h+=`<div class="frow"><label>Default value (double-tap resets here)</label>
+              <input id="cfgDef" type="number" step="0.01" min="0" max="1" value="${c.def??0.5}"></div>`;
+      }
+    }
+    if(c.binding.kind==="custom"){
+      h+=`<div class="frow"><label>Argument type</label><div class="seg" id="cfgAT">
+            <button data-v="i" class="${(c.argType||"i")==="i"?"sel":""}">int (0/1)</button>
+            <button data-v="f" class="${(c.argType||"i")==="f"?"sel":""}">float (0–1)</button></div></div>`;
+    }
+  }
+  h+=`<p class="hint">OSC address:<br><code id="cfgAddr" style="word-break:break-all;color:var(--accent)"></code></p>`;
+  body.innerHTML=h;
+  const updAddr=()=>{ document.getElementById("cfgAddr").textContent=previewAddr(); };
+  const previewAddr=()=>{
+    if(c.type==="xy"){ const kx=document.getElementById("cfgKx").value, ky=document.getElementById("cfgKy").value;
+      return "X: "+BINDINGS[kx].addr(readParams(body,"x."))+"\nY: "+BINDINGS[ky].addr(readParams(body,"y.")); }
+    const kk=document.getElementById("cfgK").value; return BINDINGS[kk].addr(readParams(body,""));
+  };
+  const segWire=(id,fn)=>{ const s=document.getElementById(id); if(s) s.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    s.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); fn(b.dataset.v); })); };
+  if(c.type==="xy"){
+    const kx=document.getElementById("cfgKx"), ky=document.getElementById("cfgKy");
+    kx.addEventListener("change",()=>{ document.getElementById("cfgPx").innerHTML=paramInputs(kx.value,{}, "x."); updAddr(); });
+    ky.addEventListener("change",()=>{ document.getElementById("cfgPy").innerHTML=paramInputs(ky.value,{}, "y."); updAddr(); });
+  } else {
+    const kk=document.getElementById("cfgK");
+    kk.addEventListener("change",()=>{ document.getElementById("cfgP").innerHTML=paramInputs(kk.value,{}, ""); updAddr(); drawCfgExtras(); });
+  }
+  body.addEventListener("input",updAddr);
+  const drawCfgExtras=()=>{}; // (kind switch re-renders on Done)
+  updAddr();
+  showSheet("cfgSheet");
+  document.getElementById("cfgDone").onclick=()=>{
+    const nc=layout.controls.find(x=>x.id===cfgId); if(!nc){ hideSheets(); return; }
+    nc.label=document.getElementById("cfgLabel").value.trim()||nc.label;
+    if(nc.type==="xy"){
+      nc.binding.x={kind:document.getElementById("cfgKx").value,p:readParams(body,"x.")};
+      nc.binding.y={kind:document.getElementById("cfgKy").value,p:readParams(body,"y.")};
+      nc.spring=document.getElementById("cfgSpring").checked;
+    } else {
+      const kk=document.getElementById("cfgK").value;
+      nc.binding={kind:kk,p:readParams(body,"")};
+      const beh=document.querySelector("#cfgBeh .sel"); if(beh) nc.behavior=beh.dataset.v;
+      const ori=document.querySelector("#cfgOri .sel"); if(ori) nc.orientation=ori.dataset.v;
+      const mn=document.getElementById("cfgMin"), mx=document.getElementById("cfgMax");
+      if(mn&&mx){ nc.min=parseFloat(mn.value); nc.max=parseFloat(mx.value); }
+      const df=document.getElementById("cfgDef");
+      if(df) nc.def=Math.min(1,Math.max(0,parseFloat(df.value)||0));
+      const at=document.querySelector("#cfgAT .sel"); if(at) nc.argType=at.dataset.v;
+      // stash numeric range for sendFloat
+      nc._min=nc.min; nc._max=nc.max; nc._int=(nc.argType==="i");
+    }
+    save(); render(); hideSheets(); toast("Saved");
+  };
+  document.getElementById("cfgDelete").onclick=()=>{
+    layout.controls=layout.controls.filter(x=>x.id!==cfgId);
+    save(); render(); hideSheets(); toast("Deleted");
+  };
+}
+
+/* ---------- edit mode ---------- */
+const editBtn=document.getElementById("editBtn");
+editBtn.addEventListener("click",()=>{
+  editing=!editing;
+  document.body.classList.toggle("editing",editing);
+  editBtn.classList.toggle("active",editing);
+  if(editing) toast("Edit mode: tap a control to configure, ◀ ▶ to reorder, ✕ to delete");
+});
+
+/* ---------- presets / export / import ---------- */
+document.getElementById("presetSel").addEventListener("change",e=>{
+  const v=e.target.value; e.target.value="";
+  if(!v) return;
+  const apply=()=>{ layout={name:v,controls:JSON.parse(JSON.stringify(PRESETS[v]))}; save(); render(); toast("Loaded “"+e.target.selectedOptions[0]?.text+"”"); };
+  if(layout.controls.length && !confirm("Replace your current layout with this preset?")) return;
+  apply();
+});
+document.getElementById("expBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(layout,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="vjremote-layout.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast("Layout exported");
+});
+document.getElementById("impBtn").addEventListener("click",()=>document.getElementById("impFile").click());
+document.getElementById("impFile").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const l=JSON.parse(r.result);
+      if(!l||!Array.isArray(l.controls)) throw 0;
+      layout=l; save(); render(); toast("Layout imported");
+    }catch(err){ toast("That file isn't a vj-remote layout"); } };
+  r.readAsText(f); e.target.value="";
+});
+
+/* ---------- boot ---------- */
+load();
+render();
+connect();
+keepAwake();
+setInterval(()=>{ if(!ws||ws.readyState!==1) connect(); }, 15000); // safety net
+</script>
+</body>
+</html>
