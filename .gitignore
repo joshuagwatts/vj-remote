@@ -1,0 +1,9 @@
+# PyInstaller build output (CI builds the exe; never commit these)
+build/
+dist/
+*.spec~
+
+# Python
+__pycache__/
+*.pyc
+.venv/

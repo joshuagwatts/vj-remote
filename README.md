@@ -4,31 +4,36 @@ No app to install, no OSC addresses to type, no TouchOSC headache.
 Your phone opens a web page; big buttons, sliders, and an XY joystick pad
 send real OSC signals straight to Resolume.
 
-## The 3-step setup (do this once)
+## Setup (2 minutes)
 
-**Step 1 — Tell Resolume to listen.**
-Open Resolume → **Preferences → OSC** → tick **Enable OSC input**.
-Leave the port at **7000**. That's it on Resolume's side.
+**The easy way — download and double-click.**
 
-**Step 2 — Start the bridge on your VJ laptop.**
-Open a terminal in this folder and run:
+1. Grab **vj-remote.exe** from the
+   [Releases page](https://github.com/joshuagwatts/vj-remote/releases)
+   (under "Assets" on the newest release).
+2. **Double-click it.** A window opens and a setup page pops up in your
+   browser — it shows a big QR code and your controller's address.
+3. In Resolume: **Preferences → OSC** → tick **Enable OSC input**
+   (leave the port at 7000).
+4. On your phone, on the **same Wi-Fi** as the laptop: scan the QR code.
+   The controller loads — no app to install.
+
+Leave the black window open while you perform — **closing it stops the
+controller.** (If your browser didn't open on its own, the address is
+printed in that window: go to `http://<that-address>/setup` on your phone.)
+
+**Trouble downloading?** Windows may warn about an unknown publisher
+(SmartScreen) because the app isn't signed — click **More info → Run anyway**.
+
+### The other way — run from Python (Mac, or if you like terminals)
 
 ```
-python -m venv .venv
-.venv\Scripts\activate        (Windows)
-# source .venv/bin/activate   (Mac/Linux)
 pip install -r requirements.txt
 python server.py
 ```
 
-You'll see a web address printed, something like
-`http://192.168.1.42:8081/`.
-
-**Step 3 — Connect your phone.**
-On your phone's browser go to `http://<that-address>/setup`
-(or just open the printed address and tap the ⛶ button).
-**Scan the QR code** with your phone camera. The controller loads —
-phone and laptop just need to be on the **same Wi-Fi**.
+Same result: a setup page opens with the QR code. Steps 3–4 above are
+identical.
 
 ## Using it
 
@@ -54,11 +59,13 @@ Tip: your phone screen won't sleep while the page is open
 
 ## If nothing happens when you tap
 
-1. Is Resolume's **OSC input enabled** (Step 1) with port **7000**?
+1. Is Resolume's **OSC input enabled** with port **7000**?
 2. Same Wi-Fi on phone and laptop? (Venue Wi-Fi sometimes blocks
    phone→laptop traffic — your phone's **hotspot** is the reliable fallback:
    connect the laptop to the phone's hotspot instead.)
-3. Windows Firewall: allow Python through when it asks on first run.
+3. Windows Firewall: the first time you run vj-remote.exe, Windows asks
+   to let it through — click **Allow**. (If you missed it: Windows
+   Settings → Firewall → "Allow an app through firewall".)
 4. In Resolume's OSC preferences there's a fold-out showing the **last
    messages received** — tap a button and watch for it there. If messages
    arrive there but nothing happens, the address is wrong for your
@@ -67,12 +74,16 @@ Tip: your phone screen won't sleep while the page is open
 
 ## For the curious
 
-- The laptop runs a tiny bridge (`server.py`): it serves this page on
+- The laptop runs a tiny bridge: it serves this page on
   port **8081** and forwards your taps as OSC over UDP to
   **127.0.0.1:7000** (Resolume on the same machine).
-- Override with flags or env vars:
-  `python server.py --http-port 8081 --osc-host 127.0.0.1 --osc-port 7000`
+- The exe and `server.py` take the same flags:
+  `vj-remote.exe --http-port 8081 --osc-host 127.0.0.1 --osc-port 7000 --no-browser`
   (`VJREMOTE_HTTP_PORT`, `VJREMOTE_OSC_HOST`, `VJREMOTE_OSC_PORT`).
+  `--no-browser` stops it auto-opening the setup page.
 - `GET /api/status` → bridge health, send/error counters, connected phones.
 - Layouts live in the phone browser's local storage; export the JSON file
   to back them up or share them.
+- The Windows exe is built automatically: `vj-remote.spec` + PyInstaller,
+  built on every push by `.github/workflows/build.yml`. Pushing a tag
+  like `v1.0` attaches the exe to a GitHub Release.

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """vj-remote bridge: serves the phone UI over HTTP and relays controls to Resolume as OSC.
 
-Run:  python server.py [--http-port 8081] [--osc-host 127.0.0.1] [--osc-port 7000]
+Run:  python server.py [--http-port 8081] [--osc-host 127.0.0.1] [--osc-port 7000] [--no-browser]
 Env:  VJREMOTE_HTTP_PORT, VJREMOTE_OSC_HOST, VJREMOTE_OSC_PORT
+
+Double-clickable too: `pyinstaller vj-remote.spec` builds a one-file
+vj-remote.exe — the console window it opens IS the "it's running" indicator,
+so it stays visible (console=True) and opens the setup page on launch.
 
 The phone opens http://<this-machine-lan-ip>:8081 (scan the QR on /setup).
 The page sends JSON over WebSocket /ctl:
@@ -16,12 +20,24 @@ import json
 import mimetypes
 import os
 import socket
+import sys
 import threading
 import time
+import webbrowser
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-WEB_DIR = HERE / "web"
+
+def resource_path(rel: str) -> Path:
+    """Resolve a bundled resource.
+
+    When frozen by PyInstaller, data files (the web/ UI) live under
+    sys._MEIPASS; otherwise they sit next to this script.
+    """
+    base = getattr(sys, "_MEIPASS", HERE)
+    return Path(base) / rel
+
+WEB_DIR = resource_path("web")
 
 # ---------------------------------------------------------------- config
 
@@ -30,6 +46,8 @@ def get_args():
     p.add_argument("--http-port", type=int, default=int(os.environ.get("VJREMOTE_HTTP_PORT", 8081)))
     p.add_argument("--osc-host", default=os.environ.get("VJREMOTE_OSC_HOST", "127.0.0.1"))
     p.add_argument("--osc-port", type=int, default=int(os.environ.get("VJREMOTE_OSC_PORT", 7000)))
+    p.add_argument("--no-browser", action="store_true",
+                   help="don't auto-open the setup page in a browser on launch")
     return p.parse_args()
 
 ARGS = get_args()
@@ -226,14 +244,34 @@ async def ctl_handler(conn):
 
 # ---------------------------------------------------------------- main
 
+def print_banner(info):
+    bar = "=" * 60
+    print(bar)
+    print("  vj-remote — your phone as a Resolume control surface")
+    print(bar)
+    print(f"  Phone page:   {info['url']}")
+    print(f"  Setup + QR:   http://{info['lan_ip']}:{ARGS.http_port}/setup")
+    print(f"  OSC target:   {ARGS.osc_host}:{ARGS.osc_port}")
+    print()
+    print("  1. Resolume > Preferences > OSC > enable input (port 7000)")
+    print("  2. Phone + laptop on the SAME Wi-Fi; scan the QR on the setup page")
+    print("  3. LEAVE THIS WINDOW OPEN — closing it stops the controller")
+    print(bar)
+    print()
+
 async def main():
     from websockets.asyncio.server import serve
+    info = info_payload()
+    print_banner(info)
+    if not ARGS.no_browser:
+        # Open the setup page in a thread so it never blocks the event loop.
+        # The server socket is bound by the time this runs.
+        threading.Thread(
+            target=webbrowser.open,
+            args=(f"http://{info['lan_ip']}:{ARGS.http_port}/setup",),
+            daemon=True,
+        ).start()
     async with serve(ctl_handler, "0.0.0.0", ARGS.http_port, process_request=process_request):
-        info = info_payload()
-        print(f"vj-remote running:  {info['url']}")
-        print(f"Setup / QR page:    http://{info['lan_ip']}:{ARGS.http_port}/setup")
-        print(f"OSC target:         {ARGS.osc_host}:{ARGS.osc_port}  (Resolume > Preferences > OSC > enable input)")
-        print("Phone + laptop must be on the same Wi-Fi. Ctrl+C to stop.")
         await asyncio.Future()  # forever
 
 if __name__ == "__main__":
