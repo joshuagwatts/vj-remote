@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">vj-remote</string>
+    <string name="title_activity_main">vj-remote</string>
+    <string name="package_name">com.holowatts.vjremote</string>
+    <string name="custom_url_scheme">com.holowatts.vjremote</string>
+</resources>

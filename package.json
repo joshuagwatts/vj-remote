@@ -1,0 +1,1 @@
+{"dependencies":{"@capacitor/android":"^6.1.0","@capacitor/core":"^6.1.0"},"description":"Phone OSC control surface for Resolume — Capacitor app + Python bridge","devDependencies":{"@capacitor/cli":"^6.1.0","playwright-core":"^1.49.0"},"name":"vj-remote","private":true,"scripts":{"sync":"cap sync android"},"version":"2.0.0"}

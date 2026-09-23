@@ -3,6 +3,9 @@ build/
 dist/
 *.spec~
 
+# Node / Capacitor
+node_modules/
+
 # Python
 __pycache__/
 *.pyc

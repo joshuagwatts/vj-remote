@@ -118,6 +118,33 @@
   .seg button.sel{background:var(--accent); color:#1a1200; font-weight:700;}
   .checkrow{display:flex; align-items:center; gap:10px; font-size:16px; padding:6px 0;}
   .checkrow input{width:24px; height:24px; accent-color:var(--accent);}
+  /* links (Vital-style routing: one control drives many) */
+  .linkbadge{position:absolute; right:6px; bottom:6px; font-size:11px; background:#000a;
+    border:1px solid var(--accent-d); color:var(--accent); border-radius:8px; padding:2px 7px; pointer-events:none;}
+  .lrow{display:flex; align-items:center; gap:8px; background:#0d1119; border:1px solid var(--line);
+    border-radius:10px; padding:8px 10px; margin:8px 0;}
+  .lrow .lname{flex:1.2; font-size:14px; font-weight:600; min-width:0;}
+  .lrow .lname small{display:block; font-weight:400; color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .lrow input[type=range]{flex:1; accent-color:var(--accent); min-width:60px;}
+  .lrow .lval{font-size:12px; color:var(--accent); min-width:46px; text-align:right; font-variant-numeric:tabular-nums;}
+  .lrow .lx{background:none; border:0; color:var(--red); font-size:16px; cursor:pointer; padding:6px;}
+  .lrow .seg{flex:0 0 auto;} .lrow .seg button{padding:7px 8px; font-size:12px;}
+  .linkaddrow{display:flex; gap:8px; margin-top:8px;}
+  .linkaddrow select{flex:1; background:#0d1119; color:var(--txt); border:1px solid var(--line);
+    border-radius:10px; font-size:15px; padding:10px; min-width:0;}
+  .linkaddrow button{background:var(--card2); color:var(--txt); border:1px solid var(--line);
+    border-radius:10px; font-size:15px; padding:10px 14px; cursor:pointer; flex:none;}
+  /* app connect overlay */
+  #connectOv{position:fixed; inset:0; z-index:100; background:var(--bg); display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:30px; text-align:center;}
+  #connectOv.show{display:flex;}
+  #connectOv h1{font-size:26px; margin:0;}
+  #connectOv p{color:var(--dim); font-size:15px; line-height:1.6; max-width:340px; margin:0;}
+  #connectOv .big{width:100%; max-width:340px;}
+  #connectOv .ghost{width:100%; max-width:340px;}
+  #connectOv input{width:100%; max-width:340px; background:#0d1119; color:var(--txt); border:1px solid var(--line);
+    border-radius:12px; font-size:16px; padding:13px; text-align:center;}
+  #connectOv .cur{font-size:12px; color:var(--dim); word-break:break-all; max-width:340px;}
   /* toast */
   #toast{position:fixed; left:50%; bottom:calc(26px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px);
     background:#222a3d; color:var(--txt); border:1px solid var(--line); padding:12px 18px; border-radius:12px;
@@ -144,7 +171,7 @@
     <option value="blank">Blank</option>
   </select>
   <button class="tbtn" id="editBtn" title="Edit layout">✎</button>
-  <button class="tbtn" id="setupBtn" title="Setup &amp; QR" onclick="location.href='/setup'">⛶</button>
+  <button class="tbtn" id="setupBtn" title="Setup &amp; QR">⛶</button>
 </div>
 
 <div class="grid" id="grid"></div>
@@ -177,8 +204,20 @@
   <input type="file" id="impFile" accept="application/json" style="display:none">
 </div>
 
+<div id="connectOv">
+  <h1>🔌 vj-remote</h1>
+  <p id="connectMsg">Point the camera at the QR code on your laptop's setup page.<br>(Double-click vj-remote.exe — the setup page opens by itself.)</p>
+  <button class="big" id="scanBtn">📷 Scan QR code</button>
+  <video id="scanVideo" style="display:none;width:100%;max-width:340px;border-radius:16px" playsinline muted></video>
+  <button class="ghost" id="scanCancel" style="display:none">Cancel scan</button>
+  <input id="bridgeIn" placeholder="or type the address: 192.168.1.5:8081" inputmode="url" autocapitalize="off" spellcheck="false">
+  <button class="ghost" id="bridgeGo">Connect</button>
+  <div class="cur" id="bridgeCur"></div>
+</div>
+
 <div id="toast"></div>
 
+<script src="jsQR.min.js"></script>
 <script>
 "use strict";
 /* ============================================================
@@ -294,7 +333,11 @@ function toast(msg, ms){
 const dot=document.getElementById("dot"), statline=document.getElementById("statline");
 let ws=null, wsAttempt=0, wsTimer=null, lastFailToast=0;
 function setDot(cls, txt){ dot.className="dot "+cls; if(txt) statline.textContent=txt; }
-function wsUrl(){ return (location.protocol==="https:"?"wss://":"ws://")+location.host+"/ctl"; }
+function wsUrl(){
+  const b=bridgeOrigin();
+  if(b) return b.replace(/^http/i,"ws")+"/ctl";   // app mode: saved bridge from QR pairing
+  return (location.protocol==="https:"?"wss://":"ws://")+location.host+"/ctl";
+}
 function connect(){
   clearTimeout(wsTimer);
   setDot("warn","connecting…");
@@ -324,6 +367,95 @@ function send(address, args){
   else sendFailed("not connected");
 }
 function buzz(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||8); }catch(e){} }
+
+/* ---------- Vital-style links: one control drives many ---------- */
+const TYPE_ICON={button:"🔘",slider:"🎚",xy:"🕹",knob:"🎛"};
+function byId(id){ return layout.controls.find(x=>x.id===id); }
+function clamp01(v){ return Math.min(1,Math.max(0,v)); }
+/* amount in -1..1: positive scales the motion, negative scales its inversion */
+function linkVal(val, amount){
+  const a=Math.max(-1,Math.min(1,amount==null?1:amount));
+  return clamp01(a>=0 ? val*a : (1-val)*(-a));
+}
+/* push a value change out along this control's links; `visited` stops cycles */
+function driveLinks(c, val, srcAxis, visited){
+  visited=visited||new Set();
+  visited.add(c.id);
+  (c.links||[]).forEach(L=>{
+    if(c.type==="xy"&&(L.src||"x")!==(srcAxis||"x")) return;
+    const t=byId(L.target);
+    if(!t||visited.has(t.id)) return;
+    const el=document.querySelector('.ctl[data-id="'+t.id+'"]');
+    if(el&&el._setLinked) el._setLinked(linkVal(val,L.amount), L.taxis||"x", visited);
+  });
+}
+
+/* ---------- phone-app bridge pairing ---------- */
+const IS_APP=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+const BRIDGE_KEY="vjremote.bridge";
+function bridgeOrigin(){ try{ return localStorage.getItem(BRIDGE_KEY)||""; }catch(e){ return ""; } }
+function setBridge(url){
+  url=String(url||"").trim();
+  if(!url) return false;
+  if(!/^https?:\/\//i.test(url)) url="http://"+url;
+  url=url.replace(/\/+$/,"");
+  try{ localStorage.setItem(BRIDGE_KEY,url); }catch(e){}
+  stopScan();
+  document.getElementById("connectOv").classList.remove("show");
+  connect();
+  toast("Bridge connected ✓");
+  return true;
+}
+let scanStream=null, scanning=false;
+function openConnect(){
+  const cur=bridgeOrigin();
+  document.getElementById("bridgeCur").textContent=cur?("current bridge: "+cur):"";
+  document.getElementById("bridgeIn").value="";
+  stopScan();
+  document.getElementById("connectOv").classList.add("show");
+}
+function stopScan(){
+  scanning=false;
+  if(scanStream){ try{ scanStream.getTracks().forEach(t=>t.stop()); }catch(e){} scanStream=null; }
+  const v=document.getElementById("scanVideo");
+  if(v){ v.style.display="none"; v.srcObject=null; }
+  const sc=document.getElementById("scanCancel"); if(sc) sc.style.display="none";
+  const sb=document.getElementById("scanBtn"); if(sb) sb.style.display="";
+}
+async function startScan(){
+  if(typeof window.jsQR!=="function"){ toast("Scanner not loaded — type the address"); return; }
+  let stream=null;
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}); }
+  catch(e){ toast("Camera blocked — type the address instead"); return; }
+  scanStream=stream;
+  const v=document.getElementById("scanVideo");
+  v.srcObject=stream; v.style.display="block";
+  try{ await v.play(); }catch(e){}
+  document.getElementById("scanBtn").style.display="none";
+  document.getElementById("scanCancel").style.display="block";
+  scanning=true;
+  const cv=document.createElement("canvas");
+  const cx=cv.getContext("2d",{willReadFrequently:true});
+  const loop=()=>{
+    if(!scanning) return;
+    if(v.readyState>=2&&v.videoWidth){
+      cv.width=v.videoWidth; cv.height=v.videoHeight;
+      cx.drawImage(v,0,0);
+      try{
+        const img=cx.getImageData(0,0,cv.width,cv.height);
+        const code=window.jsQR(img.data,cv.width,cv.height);
+        if(code&&code.data){ setBridge(code.data); return; }
+      }catch(e){}
+    }
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+document.getElementById("scanBtn").addEventListener("click",startScan);
+document.getElementById("scanCancel").addEventListener("click",stopScan);
+document.getElementById("bridgeGo").addEventListener("click",()=>{
+  if(!setBridge(document.getElementById("bridgeIn").value)) toast("Type the bridge address first");
+});
 
 /* ---------- keep screen awake (best effort) ---------- */
 let wakeLock=null;
@@ -380,6 +512,10 @@ function render(){
     if(c.type==="knob") wireKnob(el,c,val);
 
     el.addEventListener("click",()=>{ if(editing) openCfg(c.id); });
+    if((c.links||[]).length){
+      const lb=document.createElement("div"); lb.className="linkbadge";
+      lb.textContent="🔗"+c.links.length; el.appendChild(lb);
+    }
     grid.appendChild(el);
   });
   const add=document.createElement("div");
@@ -406,19 +542,25 @@ function wireButton(el,c,val){
   let on=false;
   const paint=()=>{ el.classList.toggle("on",on); el.classList.toggle("pressed",pressed); };
   let pressed=false;
+  const setOn=(nv,visited)=>{
+    on=!!nv; paint();
+    sendToggle(c.binding,on);
+    driveLinks(c,on?1:0,null,visited);
+  };
   const press=(e)=>{
     if(e) e.preventDefault();
     if(editing) return;
-    pressed=true; paint(); buzz();
-    if(isEvent){ fireEvent(c.binding); }
-    else if(behavior==="momentary"){ sendToggle(c.binding,true); }
-    else { on=!on; sendToggle(c.binding,on); paint(); }
+    pressed=true; buzz();
+    if(isEvent){ paint(); fireEvent(c.binding); }
+    else if(behavior==="momentary"){ setOn(true); }
+    else { setOn(!on); }
   };
   const release=()=>{
     if(!pressed||editing) return;
     pressed=false; paint();
-    if(!isEvent&&behavior==="momentary") sendToggle(c.binding,false);
+    if(!isEvent&&behavior==="momentary") setOn(false);
   };
+  el._setLinked=(v,axis,visited)=>{ if(!isEvent) setOn(v>=0.5,visited); };
   el.addEventListener("pointerdown",press);
   el.addEventListener("pointerup",release);
   el.addEventListener("pointercancel",release);
@@ -440,12 +582,20 @@ function wireSlider(el,c,val){
     if(c.orientation==="h"){ fill.style.width=`calc(${(v*100).toFixed(1)}% - 4px)`; }
     else { fill.style.height=`calc(${(v*100).toFixed(1)}% - 4px)`; }
   };
+  const setVal=(nv,visited)=>{
+    v=clamp01(nv);
+    c._v=v; show();
+    sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+    driveLinks(c,v,null,visited);
+  };
   const setFromEvent=(e)=>{
     const r=track.getBoundingClientRect();
-    if(c.orientation==="h") v=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));
-    else v=Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height));
-    c._v=v; show(); sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+    let nv;
+    if(c.orientation==="h") nv=(e.clientX-r.left)/r.width;
+    else nv=1-(e.clientY-r.top)/r.height;
+    setVal(nv);
   };
+  el._setLinked=(nv,axis,visited)=>setVal(nv,visited);
   // NOTE: listeners go on the card, not the track — the track has
   // pointer-events:none (like every other control visual), so a listener
   // attached to it would never fire.
@@ -464,13 +614,22 @@ function wireXY(el,c,val){
     dot.style.left=(x*100)+"%"; dot.style.top=((1-y)*100)+"%";
     val.textContent=`X ${Math.round(x*100)} · Y ${Math.round(y*100)}`;
   };
+  const sendAxis=(ax)=>{
+    const bnd=ax==="y"?c.binding.y:c.binding.x;
+    sendFloat(Object.assign({},bnd,{_min:0,_max:1}),ax==="y"?y:x);
+  };
   const setFromEvent=(e)=>{
     const r=pad.getBoundingClientRect();
-    x=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));
-    y=Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height));
-    c._x=x; c._y=y; show();
-    sendFloat(Object.assign({},c.binding,{p:c.binding.x.p,_min:0,_max:1}),x);
-    sendFloat(Object.assign({},c.binding,{p:c.binding.y.p,_min:0,_max:1}),y);
+    x=clamp01((e.clientX-r.left)/r.width);
+    y=clamp01(1-(e.clientY-r.top)/r.height);
+    c._x=x; c._y=y; show(); sendAxis("x"); sendAxis("y");
+    driveLinks(c,x,"x"); driveLinks(c,y,"y");
+  };
+  el._setLinked=(nv,axis,visited)=>{
+    const ax=axis==="y"?"y":"x";
+    if(ax==="y"){ y=clamp01(nv); c._y=y; } else { x=clamp01(nv); c._x=x; }
+    show(); sendAxis(ax);
+    driveLinks(c,ax==="y"?y:x,ax,visited);
   };
   // NOTE: listeners go on the card, not the pad — the pad has
   // pointer-events:none (like every other control visual), so a listener
@@ -483,8 +642,8 @@ function wireXY(el,c,val){
     const sx=x, sy=y, steps=6; let i=0;
     const tick=()=>{ i++; const t=i/steps, e2=1-Math.pow(1-t,3);
       x=sx+(0.5-sx)*e2; y=sy+(0.5-sy)*e2; c._x=x; c._y=y; show();
-      sendFloat(Object.assign({},c.binding,{p:c.binding.x.p,_min:0,_max:1}),x);
-      sendFloat(Object.assign({},c.binding,{p:c.binding.y.p,_min:0,_max:1}),y);
+      sendAxis("x"); sendAxis("y");
+      driveLinks(c,x,"x"); driveLinks(c,y,"y");
       if(i<steps) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   });
@@ -521,11 +680,13 @@ function wireKnob(el,c,val){
     if(isBpm){ const b=c.binding.p; val.textContent=Math.round(b.minBpm+(b.maxBpm-b.minBpm)*v)+" BPM"; }
     else val.textContent=Math.round(v*100)+"%";
   };
-  const setVal=(nv,fire)=>{
-    v=Math.min(1,Math.max(0,nv));
+  const setVal=(nv,visited)=>{
+    v=clamp01(nv);
     c._v=v; show();
-    if(fire!==false) sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+    sendFloat(Object.assign({},c.binding,{_min:c.min??0,_max:c.max??1}),v);
+    driveLinks(c,v,null,visited);
   };
+  el._setLinked=(nv,axis,visited)=>setVal(nv,visited);
   let startY=0, startV=0, moved=0, activePid=null, lastTap=0;
   el.addEventListener("pointerdown",e=>{
     if(editing) return; e.preventDefault();
@@ -644,6 +805,8 @@ function openCfg(id){
   const c=layout.controls.find(x=>x.id===id); if(!c) return;
   const body=document.getElementById("cfgBody");
   const k=BINDINGS[c.binding.kind];
+  const canSource=c.type!=="button"||BINDINGS[c.binding.kind].kind!=="event";
+  let workLinks=((c.links)||[]).map(l=>({target:l.target,amount:(l.amount==null?1:l.amount),src:l.src||"x",taxis:l.taxis||"x"}));
   let h=`<div class="frow"><label>Label</label><input id="cfgLabel" type="text" value="${c.label.replace(/"/g,"&quot;")}"></div>`;
   if(c.type==="xy"){
     h+=`<div class="frow"><label>X axis drives</label><select id="cfgKx">${kindOptions("xy",c.binding.x.kind)}</select></div>
@@ -679,8 +842,56 @@ function openCfg(id){
             <button data-v="f" class="${(c.argType||"i")==="f"?"sel":""}">float (0–1)</button></div></div>`;
     }
   }
+  if(canSource){
+    h+=`<div class="frow"><label>🔗 Links — this also drives</label>
+        <div id="cfgLinks"></div>
+        <div class="linkaddrow"><select id="linkTarget"></select><button id="linkAddGo" type="button">Add</button></div>
+        <p class="hint" style="margin:6px 0 0">One control → many, Vital-style. % scales the motion — go negative to flip it.</p></div>`;
+  }
   h+=`<p class="hint">OSC address:<br><code id="cfgAddr" style="word-break:break-all;color:var(--accent)"></code></p>`;
   body.innerHTML=h;
+  /* ----- links editor ----- */
+  const drawLinks=()=>{
+    const box=document.getElementById("cfgLinks");
+    if(!box) return;
+    workLinks=workLinks.filter(l=>l.target!==c.id&&byId(l.target));
+    const tSel=document.getElementById("linkTarget");
+    const cands=layout.controls.filter(t=>t.id!==c.id);
+    tSel.innerHTML=cands.length
+      ? cands.map(t=>`<option value="${t.id}">${TYPE_ICON[t.type]||"•"} ${t.label.replace(/</g,"&lt;")} — ${shortAddr(t)}</option>`).join("")
+      : `<option value="">no other controls yet</option>`;
+    box.innerHTML=workLinks.map((l,i)=>{
+      const t=byId(l.target);
+      const pct=Math.round((l.amount??1)*100);
+      const srcSeg=c.type==="xy"
+        ? `<div class="seg" data-lr="${i}" data-k="src"><button data-v="x" class="${(l.src||"x")==="x"?"sel":""}">X</button><button data-v="y" class="${l.src==="y"?"sel":""}">Y</button></div>` : "";
+      const txiSeg=t&&t.type==="xy"
+        ? `<div class="seg" data-lr="${i}" data-k="taxis"><button data-v="x" class="${(l.taxis||"x")==="x"?"sel":""}">→X</button><button data-v="y" class="${l.taxis==="y"?"sel":""}">→Y</button></div>` : "";
+      return `<div class="lrow"><div class="lname">${TYPE_ICON[t.type]||"•"} ${t.label.replace(/</g,"&lt;")}<small>${shortAddr(t)}</small></div>`
+        + srcSeg + txiSeg
+        + `<input type="range" min="-100" max="100" step="5" value="${pct}" data-lr="${i}">`
+        + `<div class="lval" id="lv${i}">${pct}%</div>`
+        + `<button class="lx" data-lr="${i}">✕</button></div>`;
+    }).join("")||`<p class="hint">Nothing linked yet.</p>`;
+    box.querySelectorAll('input[type="range"]').forEach(r=>r.addEventListener("input",()=>{
+      const i=+r.dataset.lr;
+      workLinks[i].amount=(+r.value)/100;
+      document.getElementById("lv"+i).textContent=r.value+"%";
+    }));
+    box.querySelectorAll(".lx").forEach(b=>b.addEventListener("click",()=>{ workLinks.splice(+b.dataset.lr,1); drawLinks(); }));
+    box.querySelectorAll(".seg").forEach(s=>s.querySelectorAll("button").forEach(btn=>btn.addEventListener("click",()=>{
+      workLinks[+s.dataset.lr][s.dataset.k]=btn.dataset.v; drawLinks();
+    })));
+  };
+  const linkAddGo=document.getElementById("linkAddGo");
+  if(linkAddGo) linkAddGo.addEventListener("click",()=>{
+    const tid=document.getElementById("linkTarget").value;
+    if(!tid||!byId(tid)) return;
+    if(workLinks.some(l=>l.target===tid)){ toast("Already linked"); return; }
+    workLinks.push({target:tid,amount:1,src:"x",taxis:"x"});
+    drawLinks(); toast("Linked 🔗");
+  });
+  drawLinks();
   const updAddr=()=>{ document.getElementById("cfgAddr").textContent=previewAddr(); };
   const previewAddr=()=>{
     if(c.type==="xy"){ const kx=document.getElementById("cfgKx").value, ky=document.getElementById("cfgKy").value;
@@ -721,6 +932,7 @@ function openCfg(id){
       // stash numeric range for sendFloat
       nc._min=nc.min; nc._max=nc.max; nc._int=(nc.argType==="i");
     }
+    nc.links=workLinks.filter(l=>l.target!==nc.id&&byId(l.target));
     save(); render(); hideSheets(); toast("Saved");
   };
   document.getElementById("cfgDelete").onclick=()=>{
@@ -764,9 +976,14 @@ document.getElementById("impFile").addEventListener("change",e=>{
 });
 
 /* ---------- boot ---------- */
+document.getElementById("setupBtn").addEventListener("click",()=>{
+  if(IS_APP) openConnect();       // app: re-pair / switch bridge
+  else location.href="/setup";     // browser: bridge's QR setup page
+});
 load();
 render();
-connect();
+if(IS_APP&&!bridgeOrigin()) openConnect();
+else connect();
 keepAwake();
 setInterval(()=>{ if(!ws||ws.readyState!==1) connect(); }, 15000); // safety net
 </script>

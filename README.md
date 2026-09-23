@@ -22,6 +22,20 @@ Leave the black window open while you perform — **closing it stops the
 controller.** (If your browser didn't open on its own, the address is
 printed in that window: go to `http://<that-address>/setup` on your phone.)
 
+### The app way — install it on your phone (recommended)
+
+1. Grab **vj-remote.apk** from the
+   [Releases page](https://github.com/joshuagwatts/vj-remote/releases)
+   (under "Assets" on the newest release) and install it
+   (Android will ask about unknown sources — that's normal, it's your own app).
+2. Double-click **vj-remote.exe** on the laptop (same Releases page) so the
+   bridge is running and the setup page with the QR code is showing.
+3. Open the app → **📷 Scan QR code** → point it at the laptop's QR.
+   Done — the app remembers the bridge and reconnects by itself every time.
+
+No QR handy? Type the address by hand (`192.168.1.5:8081`) on the same
+screen. Tap **⛶** in the app any time to switch bridges.
+
 **Trouble downloading?** Windows may warn about an unknown publisher
 (SmartScreen) because the app isn't signed — click **More info → Run anyway**.
 
@@ -48,6 +62,13 @@ identical.
   - Tap any control to rename it, change what it drives, or tweak its
     behavior (momentary vs toggle, vertical vs horizontal, min/max,
     knob default value).
+  - **🔗 Links — Vital-style routing.** One control can drive many others:
+    in a control's settings, *Link to another control…*, pick the target,
+    drag the % to scale it (negative flips it, like an inverted macro).
+    The joystick's X and Y are separate sources; an XY pad can also be a
+    target on either axis. Linked controls visibly move and send their own
+    OSC — chains work (A→B→C) and loops are stopped automatically.
+    Cards with links get a 🔗 badge.
   - **◀ ▶** reorder, **✕** delete. Everything saves automatically.
   - **Layout…** menu up top: *VJ Essentials* and *FX Playground* starters,
     or start blank. Export/import your layout as a file from the bottom bar.
@@ -85,5 +106,7 @@ Tip: your phone screen won't sleep while the page is open
 - Layouts live in the phone browser's local storage; export the JSON file
   to back them up or share them.
 - The Windows exe is built automatically: `vj-remote.spec` + PyInstaller,
-  built on every push by `.github/workflows/build.yml`. Pushing a tag
-  like `v1.0` attaches the exe to a GitHub Release.
+  built on every push by `.github/workflows/build.yml`. The same workflow
+  builds the Android APK (Capacitor, `npx cap sync android` +
+  `./gradlew assembleDebug`). Pushing a tag like `v2.0` attaches both
+  `vj-remote.exe` and `vj-remote.apk` to a GitHub Release.
